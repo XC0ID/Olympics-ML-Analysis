@@ -1,0 +1,29 @@
+data:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  summer_file: SummerSD.csv
+  winter_file: WinterSD.csv
+  countries_file: CountriesSD.csv
+
+features:
+  medal_weights:
+    Gold: 3
+    Silver: 2
+    Bronze: 1
+
+models:
+  regression:
+    n_estimators: 200
+    max_depth: 6
+    random_state: 42
+  classification:
+    n_estimators: 200
+    random_state: 42
+  clustering:
+    n_clusters: 5
+    random_state: 42
+
+evaluation:
+  test_size: 0.2
+  cv_folds: 5
+  random_state: 42
