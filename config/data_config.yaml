@@ -1,0 +1,4 @@
+valid_medals: [Gold, Silver, Bronze]
+valid_seasons: [Summer, Winter]
+min_year: 1896
+max_year: 2030
