@@ -1,4 +1,4 @@
-import sys, json
+import sys, json, os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -20,29 +20,36 @@ from src.evaluation.plotter    import (plot_medal_trends, plot_feature_importanc
                                         plot_elbow)
 from src.utils.helpers         import save_json, save_csv
 
-MODEL_DIR   = Path("models/trained");  MODEL_DIR.mkdir(parents=True, exist_ok=True)
-METRICS_DIR = Path("results/metrics"); METRICS_DIR.mkdir(parents=True, exist_ok=True)
+BASE        = Path(__file__).parent.parent
+MODEL_DIR   = BASE / "models" / "trained"
+METRICS_DIR = BASE / "results" / "metrics"
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
+METRICS_DIR.mkdir(parents=True, exist_ok=True)
 
 def main():
     print("\n=== 1. Loading data ===")
-    medals_raw, countries_raw = load_all()
+    medals_raw, countries_raw = load_all(config_path=str(BASE / "config/config.yaml"))
     validate_medals(medals_raw)
     validate_countries(countries_raw)
     medals    = clean_medals(medals_raw)
     countries = clean_countries(countries_raw)
 
     print("\n=== 2. Building features ===")
-    features  = build_features(medals, countries).dropna()
+    features  = build_features(medals, countries)
+    features  = features.dropna()
     feat_cols = get_feature_cols(features)
-    print(f"Features: {feat_cols}")
-    features.to_csv("data/processed/features.csv", index=False)
+    print(f"Features shape: {features.shape}")
+    print(f"Feature columns: {feat_cols}")
+    features.to_csv(BASE / "data/processed/features.csv", index=False)
     plot_medal_trends(features)
 
     X = features[feat_cols].values
     y = features["TotalMedals"].values
 
+    # ── Regression ──────────────────────────────────────────
     print("\n=== 3. Regression ===")
-    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_tr, X_te, y_tr, y_te = train_test_split(
+        X, y, test_size=0.2, random_state=42)
     rf   = build_rf_regressor()
     rf.fit(X_tr, y_tr)
     mets = regression_metrics(y_te, rf.predict(X_te))
@@ -51,7 +58,9 @@ def main():
     plot_feature_importance(rf, feat_cols, "regression_feature_importance")
     plot_actual_vs_pred(y_te, rf.predict(X_te))
     joblib.dump(rf, MODEL_DIR / "regression_rf.pkl")
+    print(f"  Saved: {MODEL_DIR / 'regression_rf.pkl'}")
 
+    # ── Classification ──────────────────────────────────────
     print("\n=== 4. Classification ===")
     dom      = build_dominance_labels(medals)
     feat_cls = features.merge(dom, on=["Country", "Year"], how="inner").dropna()
@@ -71,9 +80,11 @@ def main():
         print(f"  Accuracy: {clf_mets['accuracy']}")
         joblib.dump(clf, MODEL_DIR / "classification_rf.pkl")
         joblib.dump(le,  MODEL_DIR / "label_encoder.pkl")
+        print(f"  Saved: classification_rf.pkl + label_encoder.pkl")
     else:
         print("  Skipping — not enough samples.")
 
+    # ── Clustering ──────────────────────────────────────────
     print("\n=== 5. Clustering ===")
     country_agg = features.groupby("Country")[feat_cols].mean().dropna().reset_index()
     Xk          = country_agg[feat_cols].values
@@ -87,10 +98,13 @@ def main():
     plot_cluster_heatmap(country_agg, feat_cols)
     save_csv(country_agg[["Country", "Cluster"]], str(METRICS_DIR / "country_clusters.csv"))
     joblib.dump(km, MODEL_DIR / "clustering_kmeans.pkl")
+    print(f"  Saved: clustering_kmeans.pkl")
 
+    # ── Save all metrics ────────────────────────────────────
     save_json({"regression": mets, "classification": clf_mets,
                "clustering_k_scores": k_scores},
               str(METRICS_DIR / "metrics.json"))
+
     print("\n=== Done! Check models/trained/ and results/ ===")
 
 if __name__ == "__main__":
