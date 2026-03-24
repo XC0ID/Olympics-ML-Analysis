@@ -25,7 +25,21 @@ def build_features(medals: pd.DataFrame, countries: pd.DataFrame) -> pd.DataFram
     agg["IsSummer"]     = (agg["Season"] == "Summer").astype(int)
 
     if not countries.empty:
-        agg = agg.merge(countries, on="Country", how="left")
+        # drop problematic columns before merge
+        countries_clean = countries.copy()
+        drop_cols = ["Unnamed: 0", "Code"]
+        countries_clean = countries_clean.drop(
+            columns=[c for c in drop_cols if c in countries_clean.columns])
+        
+        # only keep country columns that have less than 50% nulls
+        countries_clean = countries_clean.dropna(thresh=len(countries_clean) * 0.5, axis=1)
+        
+        agg = agg.merge(countries_clean, on="Country", how="left")
+        
+        # fill remaining nulls with median instead of dropping rows
+        for col in countries_clean.columns:
+            if col != "Country" and col in agg.columns:
+                agg[col] = agg[col].fillna(agg[col].median())
 
     return agg
 
